@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>TodoTime - 倒计时管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a'}
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="./src/main.js" type="module"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app" class="flex h-screen">
+        <nav id="sidebar" class="w-60 bg-white shadow-lg flex flex-col flex-shrink-0">
+            <div class="p-5 border-b border-gray-100">
+                <h1 class="text-2xl font-bold text-primary-600">TodoTime</h1>
+                <p class="text-xs text-gray-400 mt-1">倒计时管理</p>
+            </div>
+            <div class="flex-1 p-3 space-y-1" id="nav-menu">
+                <a href="#" class="nav-item active" data-page="timer">
+                    <span class="text-xl">⏱️</span>
+                    <span>倒计时</span>
+                </a>
+                <a href="#" class="nav-item" data-page="pomodoro">
+                    <span class="text-xl">🍅</span>
+                    <span>番茄钟</span>
+                </a>
+                <a href="#" class="nav-item" data-page="stats">
+                    <span class="text-xl">📊</span>
+                    <span>统计</span>
+                </a>
+                <a href="#" class="nav-item" data-page="todos">
+                    <span class="text-xl">📋</span>
+                    <span>待办事项</span>
+                </a>
+                <a href="#" class="nav-item" data-page="backlog">
+                    <span class="text-xl">📦</span>
+                    <span>堆积代办</span>
+                </a>
+                <a href="#" class="nav-item" data-page="labels">
+                    <span class="text-xl">🏷️</span>
+                    <span>标签管理</span>
+                </a>
+                <a href="#" class="nav-item" data-page="settings">
+                    <span class="text-xl">⚙️</span>
+                    <span>设置</span>
+                </a>
+            </div>
+            <div class="p-4 border-t border-gray-100 text-xs text-gray-400 text-center">
+                TodoTime v1.0
+            </div>
+        </nav>
+        <main id="content" class="flex-1 overflow-auto p-8">
+            <div id="page-content">
+                <div class="text-center text-gray-400 mt-20">
+                    <p class="text-4xl mb-4">⏱️</p>
+                    <p>请选择一个功能</p>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
