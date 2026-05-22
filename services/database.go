@@ -2,12 +2,14 @@ package services
 
 import (
 	"TodoTime/models"
+	"database/sql"
 	"os"
 	"path/filepath"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	_ "modernc.org/sqlite"
 )
 
 var DB *gorm.DB
@@ -20,7 +22,14 @@ func InitDatabase() error {
 	dir := filepath.Dir(exe)
 	dbPath := filepath.Join(dir, "todotime.db")
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	sqlDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return err
+	}
+
+	db, err := gorm.Open(sqlite.New(sqlite.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {
