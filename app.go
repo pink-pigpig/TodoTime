@@ -9,20 +9,27 @@ import (
 type App struct {
 	ctx             context.Context
 	LabelController *controllers.LabelController
+	TimerController *controllers.TimerController
+	timerService    *services.TimerService
 }
 
 func NewApp() *App {
+	timerSvc := services.NewTimerService()
 	return &App{
 		LabelController: controllers.NewLabelController(),
+		TimerController: controllers.NewTimerController(timerSvc),
+		timerService:    timerSvc,
 	}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.timerService.SetContext(ctx)
 	if err := services.InitDatabase(); err != nil {
 		panic("数据库初始化失败: " + err.Error())
 	}
 	initDefaultLabels()
+	a.timerService.RestoreFromSaved()
 }
 
 func initDefaultLabels() {

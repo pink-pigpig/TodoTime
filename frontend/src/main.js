@@ -12,16 +12,108 @@ async function updateLabel(id, name, color) {
 async function deleteLabel(id) {
     return window['go']['controllers']['LabelController']['DeleteLabel'](id)
 }
+async function startTimer(seconds, labelId) {
+    return window['go']['controllers']['TimerController']['StartTimer'](seconds, labelId)
+}
+async function pauseTimer() {
+    return window['go']['controllers']['TimerController']['PauseTimer']()
+}
+async function resumeTimer() {
+    return window['go']['controllers']['TimerController']['ResumeTimer']()
+}
+async function resetTimer() {
+    return window['go']['controllers']['TimerController']['ResetTimer']()
+}
+async function stopTimer() {
+    return window['go']['controllers']['TimerController']['StopTimer']()
+}
+async function getTimerState() {
+    return window['go']['controllers']['TimerController']['GetTimerState']()
+}
+async function getSavedTimer() {
+    return window['go']['controllers']['TimerController']['GetSavedTimer']()
+}
+async function restoreTimer() {
+    return window['go']['controllers']['TimerController']['RestoreTimer']()
+}
+
+const TIMER_STATE = { IDLE: 0, RUNNING: 1, PAUSED: 2, COMPLETED: 3 }
+
+function formatTime(seconds) {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
 
 const app = {
     currentPage: 'timer',
     selectedLabelId: null,
     labels: [],
+    timerState: TIMER_STATE.IDLE,
+    timerRemaining: 0,
+    timerTotal: 0,
 
     async init() {
         this.setupNavigation()
+        this.setupTimerEvents()
         await this.loadLabels()
+        await this.checkSavedTimer()
         this.navigate('timer')
+    },
+
+    setupTimerEvents() {
+        window.runtime.EventsOn('timer:tick', (data) => {
+            this.timerState = data.state
+            this.timerRemaining = data.remaining
+            this.timerTotal = data.total
+            this.updateTimerDisplay()
+        })
+        window.runtime.EventsOn('timer:complete', (data) => {
+            this.timerState = TIMER_STATE.COMPLETED
+            this.selectedLabelId = null
+            this.updateTimerDisplay()
+            this.showCompletionNotification(data)
+        })
+    },
+
+    async checkSavedTimer() {
+        try {
+            const [remaining, total, labelId] = await getSavedTimer()
+            if (total > 0 && remaining > 0) {
+                await restoreTimer()
+                this.timerState = TIMER_STATE.PAUSED
+                this.timerRemaining = remaining
+                this.timerTotal = total
+                this.selectedLabelId = labelId
+            }
+        } catch (e) {
+            console.error('检查恢复状态失败:', e)
+        }
+    },
+
+    showCompletionNotification(data) {
+        const label = this.labels.find(l => l.ID === this.selectedLabelId)
+        const labelName = label ? label.Name : '未分类'
+        const display = document.getElementById('timer-display')
+        if (display) {
+            display.textContent = '✅ 完成!'
+            display.classList.add('text-green-500')
+        }
+
+        const minutes = Math.floor(data.duration / 60)
+        const msg = `专注 ${labelName} ${minutes} 分钟！`
+
+        if (Notification.permission === 'granted') {
+            new Notification('TodoTime - 倒计时结束', { body: msg })
+        }
+
+        const notification = document.getElementById('completion-notification')
+        if (notification) {
+            notification.classList.remove('hidden')
+            notification.querySelector('.notif-msg').textContent = msg
+            setTimeout(() => notification.classList.add('hidden'), 5000)
+        }
     },
 
     async loadLabels() {
@@ -64,7 +156,138 @@ const app = {
             this.setupLabelDialogEvents()
         } else if (page === 'timer') {
             this.renderLabelSelector()
+            this.setupTimerButtons()
         }
+    },
+
+    setupTimerButtons() {
+        const startBtn = document.getElementById('btn-start')
+        const pauseBtn = document.getElementById('btn-pause')
+        const resetBtn = document.getElementById('btn-reset')
+
+        if (startBtn) startBtn.onclick = () => this.handleStart()
+        if (pauseBtn) pauseBtn.onclick = () => this.handlePause()
+        if (resetBtn) resetBtn.onclick = () => this.handleReset()
+
+        this.updateTimerDisplay()
+    },
+
+    async handleStart() {
+        if (this.timerState === TIMER_STATE.PAUSED) {
+            await resumeTimer()
+            return
+        }
+        if (this.timerState === TIMER_STATE.RUNNING) return
+
+        const input = document.getElementById('timer-input')
+        if (!input) return
+        const minutes = parseInt(input.value) || 25
+        const seconds = minutes * 60
+
+        if (seconds <= 0) return
+        if (Notification.permission === 'default') {
+            Notification.requestPermission()
+        }
+
+        try {
+            const labelId = this.selectedLabelId || null
+            await startTimer(seconds, labelId)
+        } catch (e) {
+            console.error('启动倒计时失败:', e)
+        }
+    },
+
+    async handlePause() {
+        if (this.timerState === TIMER_STATE.RUNNING) {
+            await pauseTimer()
+        } else if (this.timerState === TIMER_STATE.PAUSED) {
+            await resumeTimer()
+        }
+    },
+
+    async handleReset() {
+        await resetTimer()
+        this.timerState = TIMER_STATE.IDLE
+        this.timerRemaining = 0
+        this.timerTotal = 0
+
+        const display = document.getElementById('timer-display')
+        if (display) {
+            display.textContent = '00:00:00'
+            display.classList.remove('text-green-500')
+        }
+
+        const labelEl = document.getElementById('timer-label')
+        if (labelEl) labelEl.textContent = '未开始'
+
+        const startBtn = document.getElementById('btn-start')
+        const pauseBtn = document.getElementById('btn-pause')
+        const resetBtn = document.getElementById('btn-reset')
+        const timePicker = document.getElementById('timer-time-picker')
+
+        if (startBtn) { startBtn.classList.remove('hidden'); startBtn.textContent = '开始' }
+        if (pauseBtn) pauseBtn.classList.add('hidden')
+        if (resetBtn) resetBtn.classList.add('hidden')
+        if (timePicker) timePicker.classList.remove('hidden')
+    },
+
+    updateTimerDisplay() {
+        const display = document.getElementById('timer-display')
+        const labelEl = document.getElementById('timer-label')
+        const startBtn = document.getElementById('btn-start')
+        const pauseBtn = document.getElementById('btn-pause')
+        const resetBtn = document.getElementById('btn-reset')
+        const timePicker = document.getElementById('timer-time-picker')
+
+        if (!display) return
+
+        if (this.timerState === TIMER_STATE.COMPLETED) {
+            if (startBtn) startBtn.classList.add('hidden')
+            if (pauseBtn) pauseBtn.classList.add('hidden')
+            if (resetBtn) resetBtn.classList.remove('hidden')
+            if (timePicker) timePicker.classList.add('hidden')
+            return
+        }
+
+        if (this.timerState === TIMER_STATE.IDLE) {
+            display.textContent = '00:00:00'
+            if (labelEl) labelEl.textContent = '未开始'
+            if (startBtn) { startBtn.classList.remove('hidden'); startBtn.textContent = '开始' }
+            if (pauseBtn) pauseBtn.classList.add('hidden')
+            if (resetBtn) resetBtn.classList.add('hidden')
+            if (timePicker) timePicker.classList.remove('hidden')
+            return
+        }
+
+        display.textContent = formatTime(this.timerRemaining)
+        display.classList.remove('text-green-500')
+        if (labelEl) {
+            const label = this.labels.find(l => l.ID === this.selectedLabelId)
+            labelEl.textContent = label ? `当前标签: ${label.Name}` : '未分类'
+        }
+        if (startBtn) startBtn.classList.add('hidden')
+        if (pauseBtn) {
+            pauseBtn.classList.remove('hidden')
+            pauseBtn.textContent = this.timerState === TIMER_STATE.PAUSED ? '继续' : '暂停'
+        }
+        if (resetBtn) resetBtn.classList.remove('hidden')
+        if (timePicker) timePicker.classList.add('hidden')
+    },
+
+    showTimePicker() {
+        const overlay = document.getElementById('time-picker-overlay')
+        if (overlay) overlay.classList.remove('hidden')
+    },
+
+    hideTimePicker() {
+        const overlay = document.getElementById('time-picker-overlay')
+        if (overlay) overlay.classList.add('hidden')
+    },
+
+    setTimerPreset(minutes) {
+        const input = document.getElementById('timer-input')
+        if (input) input.value = minutes
+        this.hideTimePicker()
     },
 
     setupLabelDialogEvents() {
@@ -99,6 +322,10 @@ const app = {
     renderLabelSelector() {
         const container = document.getElementById('label-selector')
         if (!container) return
+        if (this.labels.length === 0) {
+            container.innerHTML = '<span class="text-xs text-gray-400">暂无标签</span>'
+            return
+        }
         container.innerHTML = this.labels.map(l =>
             `<button class="label-btn px-3 py-1 rounded-full text-sm text-white transition" style="background:${l.Color}" data-id="${l.ID}">${l.Name}</button>`
         ).join('')
@@ -123,7 +350,7 @@ const app = {
             return
         }
         list.innerHTML = this.labels.map(l => `
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2" data-id="${l.ID}">
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2">
                 <div class="flex items-center gap-3">
                     <span class="w-4 h-4 rounded-full" style="background:${l.Color}"></span>
                     <span class="text-gray-700 font-medium">${l.Name}</span>
@@ -190,14 +417,43 @@ const app = {
         return `
             <div class="max-w-2xl mx-auto text-center">
                 <h2 class="text-2xl font-bold text-gray-800 mb-8">倒计时</h2>
-                <div id="timer-display" class="text-8xl font-mono font-bold text-primary-600 mb-10 tabular-nums">00:00:00</div>
-                <div id="timer-label" class="text-sm text-gray-500 mb-6">未开始</div>
+                <div id="timer-display" class="text-8xl font-mono font-bold text-primary-600 mb-6 tabular-nums leading-none">${this.timerState === TIMER_STATE.PAUSED ? formatTime(this.timerRemaining) : '00:00:00'}</div>
+                <div id="timer-label" class="text-sm text-gray-500 mb-6">${this.timerState === TIMER_STATE.PAUSED ? '已从上次状态恢复' : '未开始'}</div>
+                <div id="timer-time-picker" class="${this.timerState !== TIMER_STATE.IDLE ? 'hidden' : ''}">
+                    <div class="flex justify-center items-center gap-3 mb-6">
+                        <input id="timer-input" type="number" min="1" max="999" value="25" class="w-20 px-3 py-2 text-center text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                        <span class="text-gray-500">分钟</span>
+                        <button id="btn-set-time" class="px-4 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition">预设</button>
+                    </div>
+                </div>
                 <div class="flex justify-center gap-4 mb-8">
-                    <button id="btn-start" class="px-8 py-3 bg-primary-500 text-white rounded-full font-semibold hover:bg-primary-600 transition shadow-lg">开始</button>
-                    <button id="btn-pause" class="px-8 py-3 bg-yellow-500 text-white rounded-full font-semibold hover:bg-yellow-600 transition shadow-lg hidden">暂停</button>
-                    <button id="btn-reset" class="px-8 py-3 bg-gray-500 text-white rounded-full font-semibold hover:bg-gray-600 transition shadow-lg">重置</button>
+                    <button id="btn-start" class="px-8 py-3 ${this.timerState === TIMER_STATE.PAUSED ? 'hidden' : ''} bg-primary-500 text-white rounded-full font-semibold hover:bg-primary-600 transition shadow-lg">${this.timerState === TIMER_STATE.PAUSED ? '继续' : '开始'}</button>
+                    <button id="btn-pause" class="px-8 py-3 bg-yellow-500 text-white rounded-full font-semibold hover:bg-yellow-600 transition shadow-lg ${this.timerState === TIMER_STATE.PAUSED ? '' : 'hidden'}">继续</button>
+                    <button id="btn-reset" class="px-8 py-3 bg-gray-500 text-white rounded-full font-semibold hover:bg-gray-600 transition shadow-lg ${this.timerState === TIMER_STATE.IDLE ? 'hidden' : ''}">重置</button>
                 </div>
                 <div class="flex justify-center gap-2 flex-wrap" id="label-selector"></div>
+
+                <div id="completion-notification" class="hidden fixed top-6 right-6 bg-green-50 border border-green-200 rounded-xl p-5 shadow-lg z-50 max-w-sm">
+                    <div class="flex items-start gap-3">
+                        <span class="text-2xl">🎉</span>
+                        <div>
+                            <p class="font-semibold text-green-800">倒计时完成!</p>
+                            <p class="notif-msg text-sm text-green-600 mt-1"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="time-picker-overlay" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-xl p-6 w-80 shadow-2xl">
+                        <h3 class="text-lg font-bold mb-4">选择时长</h3>
+                        <div class="grid grid-cols-3 gap-3">
+                            ${[5,10,15,25,30,45,60,90,120].map(m =>
+                                `<button class="preset-time px-4 py-3 bg-gray-100 rounded-lg hover:bg-primary-100 hover:text-primary-600 transition font-medium text-sm" data-minutes="${m}">${m < 60 ? m + ' 分钟' : (m/60) + ' 小时'}</button>`
+                            ).join('')}
+                        </div>
+                        <button id="close-time-picker" class="mt-4 w-full px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition text-sm">取消</button>
+                    </div>
+                </div>
             </div>
         `
     },
@@ -260,4 +516,18 @@ const app = {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => app.init())
+document.addEventListener('DOMContentLoaded', () => {
+    app.init()
+    setTimeout(() => {
+        const pickerOverlay = document.getElementById('time-picker-overlay')
+        if (pickerOverlay) {
+            document.querySelectorAll('.preset-time').forEach(btn => {
+                btn.onclick = () => app.setTimerPreset(parseInt(btn.dataset.minutes))
+            })
+            document.getElementById('close-time-picker').onclick = () => app.hideTimePicker()
+            pickerOverlay.onclick = (e) => {
+                if (e.target === pickerOverlay) app.hideTimePicker()
+            }
+        }
+    }, 100)
+})
